@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Glitch Globe Final Fixed</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: black; font-family: 'Monospace', monospace; touch-action: none; }
+        canvas { display: block; }
+        
+        /* UI Wrapper */
+        #ui-wrapper {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 280px;
+            z-index: 100;
+        }
+
+        #ui-header {
+            background: #222;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border: 1px solid #444;
+            user-select: none;
+        }
+
+        #ui-toggle-btn {
+            background: none;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 4px;
+            padding: 2px 8px;
+            cursor: pointer;
+        }
+
+        #ui-content {
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid #444;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        #ui-wrapper:hover #ui-content, #ui-content.open {
+            max-height: 80vh;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: #1a1a1a;
+            border-bottom: 1px solid #444;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px 0;
+            text-align: center;
+            cursor: pointer;
+            font-size: 10px;
+            color: #888;
+            background: #1a1a1a;
+            border: none;
+            font-family: 'Monospace', monospace;
+        }
+
+        .tab.active {
+            color: white;
+            background: #333;
+            font-weight: bold;
+        }
+
+        .tab-content {
+            padding: 15px;
+            display: none;
+            overflow-y: auto;
+            max-height: 60vh;
+        }
+
+        .tab-content.active { display: block; }
+
+        /* Rows & Inputs */
+        .row { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 12px; 
+            flex-wrap: wrap;
+        }
+        
+        .label { font-size: 12px; font-weight: bold; color: #ccc; }
+        
+        button.action-btn {
+            background: #333; color: white; border: 1px solid #666; 
+            padding: 6px 10px; cursor: pointer; font-family: inherit; width: 100%;
+            border-radius: 4px;
+            margin-top: 5px;
+            font-family: 'Monospace', monospace;
+        }
+        button.action-btn:hover { background: #555; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        input[type="color"] { border: none; width: 30px; height: 30px; padding: 0; background: none; cursor: pointer; }
+        input[type="range"] { flex-grow: 1; margin: 0 10px; cursor: pointer; }
+        input[type="number"] { width: 50px; background: #222; border: 1px solid #555; color: white; padding: 2px; font-family: 'Monospace', monospace; }
+        input[type="checkbox"] { transform: scale(1.2); cursor: pointer; }
+
+        /* Hiding Logic */
+        #tab-cyber-btn { display: none; }
+        #tab-cyber-btn.visible { display: block; }
+        .secret-setting { display: none; }
+        .secret-setting.visible { display: flex; }
+
+        /* Cyber Overlay (Desktop) */
+        #cyber-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 14px;
+            background: rgba(0,0,0,0.6);
+            padding: 15px 25px;
+            border: 1px solid #444;
+            display: none;
+            pointer-events: none;
+            user-select: none;
+            text-align: center;
+            line-height: 1.6;
+            opacity: 1;
+            transition: opacity 1s ease-out; 
+        }
+
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 6px;
+            height: 6px;
+            background: white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            display: none;
+            mix-blend-mode: difference;
+        }
+
+        /* Compass */
+        #compass {
+            position: absolute;
+            top: 20px;
+            right: 320px; 
+            width: 50px;
+            height: 50px;
+            border: 2px solid #555;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 99;
+            box-shadow: 0 0 10px rgba(255,255,255,0.1);
+        }
+
+        #compass-arrow {
+            color: #ff3333;
+            font-size: 24px;
+            font-weight: bold;
+            transform-origin: center;
+            display: block;
+        }
+
+        /* Mobile UI */
+        #mobile-ui {
+            display: none;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        #joystick-area {
+            position: absolute;
+            bottom: 40px;
+            left: 30px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            pointer-events: auto;
+        }
+
+        #joystick-stick {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        #mobile-buttons {
+            position: absolute;
+            bottom: 40px;
+            right: 30px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        .mob-btn {
+            width: 60px;
+            height: 60px;
+            background: rgba(50, 50, 50, 0.7);
+            border: 1px solid #888;
+            border-radius: 50%;
+            color: white;
+            font-size: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            cursor: pointer;
+        }
+        .mob-btn:active { background: rgba(100, 100, 100, 0.9); }
+
+        #interaction-ui {
+            display: none;
+            position: absolute;
+            bottom: 150px;
+            right: 30px;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: auto;
+            z-index: 51;
+        }
+        
+        .interact-btn {
+            width: 80px;
+            height: 40px;
+            background: rgba(0, 100, 200, 0.6);
+            border: 1px solid #8cf;
+            color: white;
+            font-weight: bold;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+        .interact-btn.throw { background: rgba(200, 50, 50, 0.6); border-color: #f88; }
+        .interact-btn.drop { background: rgba(100, 100, 100, 0.6); border-color: #ccc; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #222; }
+        ::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <div id="crosshair"></div>
+    <div id="compass"><span id="compass-arrow">▲</span></div>
+    
+    <div id="cyber-overlay">
+        HOLD [R-CLICK] TO LOOK<br>
+        HOLD [L-CLICK] TO GRAB<br>
+        PRESS [T] TO THROW<br>
+        WASD TO MOVE
+    </div>
+
+    <div id="ui-wrapper">
+        <div id="ui-header">
+            <span>Settings</span>
+            <button id="ui-toggle-btn">•••</button>
+        </div>
+        <div id="ui-content">
+            <div class="tabs">
+                <button class="tab active" data-target="tab-visual" id="btn-tab-visual">Visual</button>
+                <button class="tab" data-target="tab-world">World</button>
+                <button class="tab" data-target="tab-behavior">Logic</button>
+                <button class="tab" data-target="tab-physics">Physics</button>
+                <button class="tab" id="tab-cyber-btn" data-target="tab-cyber">Cyber</button>
+            </div>
+
+            <div id="tab-visual" class="tab-content active">
+                <div class="row">
+                    <button class="action-btn" id="btn-shape">Toggle Shape: Sphere</button>
+                </div>
+                <div class="row">
+                    <span class="label">Mesh Color</span>
+                    <input type="color" id="col-mesh" value="#ffffff">
+                </div>
+                <div class="row">
+                    <span class="label">Grid Color</span>
+                    <input type="color" id="col-grid" value="#000000">
+                </div>
+                <div class="row">
+                    <span class="label">Display Grid</span>
+                    <input type="checkbox" id="chk-grid" checked>
+                </div>
+                <div class="row">
+                    <span class="label">Display Chars</span>
+                    <input type="checkbox" id="chk-chars" checked>
+                </div>
+                <div class="row">
+                    <span class="label">Grid Density</span>
+                    <input type="range" id="sl-grid" min="10" max="100" value="20">
+                    <input type="number" id="num-grid" value="20">
+                </div>
+            </div>
+
+            <div id="tab-world" class="tab-content">
+                <div class="row">
+                    <span class="label">Sky Color</span>
+                    <input type="color" id="col-sky" value="#000000">
+                </div>
+                <div class="row">
+                    <span class="label">Sky Luminance</span>
+                    <input type="range" id="sl-luminance" min="0" max="3" step="0.1" value="1">
+                </div>
+                <div class="row secret-setting" id="row-floor">
+                    <span class="label">Floor Color (Physics)</span>
+                    <input type="color" id="col-floor" value="#222222">
+                </div>
+            </div>
+
+            <div id="tab-behavior" class="tab-content">
+                <div class="row">
+                    <span class="label">Randomizer</span>
+                    <input type="checkbox" id="chk-randomizer" checked>
+                </div>
+                <div class="row">
+                    <button class="action-btn" id="btn-shuffle" disabled>Manual Shuffle</button>
+                </div>
+                <div class="row">
+                    <span class="label">Spread Effect</span>
+                    <input type="checkbox" id="chk-spread" checked>
+                </div>
+                <div class="row">
+                    <span class="label">Resolution</span>
+                    <input type="range" id="sl-res" min="0.1" max="1" step="0.1" value="1">
+                </div>
+            </div>
+
+            <div id="tab-physics" class="tab-content">
+                <div class="row">
+                    <span class="label">Enable Physics</span>
+                    <input type="checkbox" id="chk-physics">
+                </div>
+                <div class="row secret-setting" id="row-gravity">
+                    <span class="label">Gravity</span>
+                    <input type="range" id="sl-gravity" min="0" max="2" step="0.05" value="0.5">
+                </div>
+            </div>
+
+            <div id="tab-cyber" class="tab-content">
+                <div class="row">
+                    <span class="label">Cyberspace Mode</span>
+                    <input type="checkbox" id="chk-cyberspace">
+                </div>
+                <div class="row" style="margin-top:10px; border-bottom:1px solid #333; padding-bottom:5px;">
+                    <span class="label" style="color:white;">Flashlight Settings</span>
+                </div>
+                <div class="row">
+                    <span class="label">Color</span>
+                    <input type="color" id="col-flash" value="#ffffff">
+                </div>
+                <div class="row">
+                    <span class="label">Brightness</span>
+                    <input type="range" id="sl-flash-int" min="0" max="5" step="0.1" value="2">
+                </div>
+                <div class="row">
+                    <span class="label">Distance</span>
+                    <input type="range" id="sl-flash-dist" min="10" max="200" value="50">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="mobile-ui">
+        <div id="joystick-area">
+            <div id="joystick-stick"></div>
+        </div>
+        <div id="mobile-buttons">
+            <div class="mob-btn" id="m-sprint">SPRINT</div>
+            <div class="mob-btn" id="m-jump">JUMP</div>
+            <div class="mob-btn" id="m-crouch">CROUCH</div>
+            <div class="mob-btn" id="m-flash">LIGHT</div>
+        </div>
+        <div id="interaction-ui">
+            <div class="interact-btn" id="m-grab">GRAB</div>
+            <div class="interact-btn drop" id="m-drop" style="display:none;">LET GO</div>
+            <div class="interact-btn throw" id="m-throw" style="display:none;">THROW</div>
+        </div>
+    </div>
+
+    <script src="js/three.min.js"></script>
+    <script src="js/OrbitControls.js"></script>
+
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);
+        scene.fog = new THREE.Fog(0x000000, 20, 100);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 25;
+        camera.rotation.order = 'YXZ'; 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.enablePan = false;
+        controls.minDistance = 12;
+        controls.maxDistance = 60;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1);
+        scene.add(ambientLight);
+
+        const flashLight = new THREE.SpotLight(0xffffff, 0);
+        flashLight.position.set(0, 0, 0);
+        flashLight.angle = Math.PI / 6;
+        flashLight.penumbra = 0.5;
+        flashLight.decay = 2;
+        flashLight.distance = 50;
+        flashLight.castShadow = true;
+        flashLight.target.position.set(0, 0, -1);
+        scene.add(flashLight);
+        scene.add(flashLight.target);
+
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
+        let rows = 20;
+        let cols = 40;
+        const canvasWidth = 1024; 
+        const canvasHeight = 512;
+        let gridData = [];
+        let meshColor = '#ffffff';
+        let gridColor = '#000000';
+        let activeWaveState = null; 
+        
+        let settingRandomizer = true;
+        let settingSpread = true;
+        let settingPhysics = false;
+        let settingShowGrid = true;
+        let settingShowChars = true;
+        let settingGravity = 0.5;
+        
+        let settingCyber = false;
+        let flashOn = false;
+        
+        const floorGeometry = new THREE.PlaneGeometry(200, 200);
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
+        const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
+        floorMesh.rotation.x = -Math.PI / 2;
+        floorMesh.position.y = -15;
+        floorMesh.receiveShadow = true;
+        floorMesh.visible = false;
+        scene.add(floorMesh);
+
+        const textureCanvas = document.createElement('canvas');
+        textureCanvas.width = canvasWidth;
+        textureCanvas.height = canvasHeight;
+        const ctx = textureCanvas.getContext('2d', { alpha: false });
+
+        const staticCanvas = document.createElement('canvas');
+        staticCanvas.width = canvasWidth;
+        staticCanvas.height = canvasHeight;
+        const staticCtx = staticCanvas.getContext('2d', { alpha: false });
+        let staticNeedsUpdate = true;
+
+        const texture = new THREE.CanvasTexture(textureCanvas);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+
+        let geometrySphere = new THREE.SphereGeometry(10, 64, 64);
+        let geometryBox = new THREE.BoxGeometry(14, 14, 14);
+        
+        const material = new THREE.MeshStandardMaterial({ 
+            map: texture, 
+            roughness: 0.5,
+            metalness: 0.1
+        });
+        
+        let currentMesh = new THREE.Mesh(geometrySphere, material);
+        currentMesh.castShadow = true;
+        scene.add(currentMesh);
+
+        let isSphere = true;
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const dragPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        const raycasterPlane = new THREE.Raycaster();
+
+        let objVelocity = new THREE.Vector3(0, 0, 0);
+        let isDragging = false;
+        let previousDragPosition = new THREE.Vector3();
+        
+        let isHoldingMobile = false;
+        let isHoldingDesktop = false;
+        
+        let playerVelocity = new THREE.Vector3();
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let canJump = false, isSprinting = false, isCrouching = false;
+
+        let isLooking = false;
+        let lastLookX = 0;
+        let lastLookY = 0;
+        // Removed tracked variable isRightMouseDown to depend on e.buttons instead
+
+        function initGrid() {
+            cols = rows * 2; 
+            gridData = [];
+            for (let y = 0; y < rows; y++) {
+                const row = [];
+                for (let x = 0; x < cols; x++) {
+                    row.push({
+                        char: chars[Math.floor(Math.random() * chars.length)],
+                        frozen: false,
+                        frozenChar: ''
+                    });
+                }
+                gridData.push(row);
+            }
+            staticNeedsUpdate = true;
+        }
+
+        function updateStaticLayer() {
+            const cellWidth = canvasWidth / cols;
+            const cellHeight = canvasHeight / rows;
+
+            staticCtx.fillStyle = meshColor;
+            staticCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            if (settingShowGrid) {
+                staticCtx.lineWidth = Math.max(2, (100 / rows)); 
+                staticCtx.strokeStyle = gridColor;
+                staticCtx.beginPath();
+                for (let i = 0; i <= cols; i++) {
+                    const x = Math.floor(i * cellWidth);
+                    staticCtx.moveTo(x, 0);
+                    staticCtx.lineTo(x, canvasHeight);
+                }
+                for (let i = 0; i <= rows; i++) {
+                    const y = Math.floor(i * cellHeight);
+                    staticCtx.moveTo(0, y);
+                    staticCtx.lineTo(canvasWidth, y);
+                }
+                staticCtx.stroke();
+            }
+            staticNeedsUpdate = false;
+        }
+
+        function drawCanvas() {
+            if (staticNeedsUpdate) updateStaticLayer();
+            ctx.drawImage(staticCanvas, 0, 0);
+
+            if (settingShowChars) {
+                const cellWidth = canvasWidth / cols;
+                const cellHeight = canvasHeight / rows;
+
+                ctx.fillStyle = gridColor;
+                ctx.font = `bold ${Math.floor(cellHeight * 0.7)}px monospace`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                for (let y = 0; y < rows; y++) {
+                    for (let x = 0; x < cols; x++) {
+                        const cell = gridData[y][x];
+                        if (!cell.frozen && settingRandomizer) {
+                            if (Math.random() > 0.1) cell.char = chars[Math.floor(Math.random() * chars.length)];
+                        } else if (cell.frozen) {
+                            cell.char = cell.frozenChar;
+                        }
+                        const posX = (x * cellWidth) + (cellWidth / 2);
+                        const posY = (y * cellHeight) + (cellHeight / 2);
+                        ctx.fillText(cell.char, posX, posY);
+                    }
+                }
+            }
+            texture.needsUpdate = true;
+        }
+
+        let frameCount = 0;
+        function updateDominos() {
+            if (!settingSpread || activeWaveState === null || frameCount % 4 !== 0) return;
+            const cellsToFlip = [];
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    if (gridData[y][x].frozen === activeWaveState) {
+                        const neighbors = [{r:y-1,c:x}, {r:y+1,c:x}, {r:y,c:x-1}, {r:y,c:x+1}];
+                        neighbors.forEach(n => {
+                            let nr = n.r, nc = n.c;
+                            if (nc < 0) nc = cols - 1; if (nc >= cols) nc = 0;
+                            if (nr >= 0 && nr < rows) {
+                                if (gridData[nr][nc].frozen !== activeWaveState) {
+                                    cellsToFlip.push({ r: nr, c: nc, char: gridData[y][x].frozenChar });
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+            cellsToFlip.forEach(item => {
+                const cell = gridData[item.r][item.c];
+                cell.frozen = activeWaveState;
+                if (activeWaveState === true) cell.frozenChar = item.char;
+            });
+        }
+
+        function updatePhysics() {
+            if (!settingPhysics) {
+                currentMesh.position.set(0,0,0);
+                currentMesh.rotation.set(0,0,0);
+                objVelocity.set(0,0,0);
+                return;
+            }
+
+            if (isDragging) return;
+
+            if (isHoldingMobile || isHoldingDesktop) {
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+                const targetPos = camera.position.clone().add(forward.multiplyScalar(15));
+                currentMesh.position.lerp(targetPos, 0.1);
+                objVelocity.set(0,0,0);
+                currentMesh.rotation.x += 0.01;
+                currentMesh.rotation.y += 0.01;
+                return;
+            }
+
+            objVelocity.y -= settingGravity * 0.1;
+            objVelocity.x *= 0.98; 
+            objVelocity.z *= 0.98;
+
+            currentMesh.position.add(objVelocity);
+            currentMesh.rotation.x += objVelocity.z * 0.05;
+            currentMesh.rotation.z -= objVelocity.x * 0.05;
+
+            const floorY = -15;
+            const radius = isSphere ? 10 : 9; 
+
+            if (currentMesh.position.y - radius < floorY) {
+                currentMesh.position.y = floorY + radius;
+                objVelocity.y *= -0.7; 
+                if (Math.abs(objVelocity.y) < 0.1) objVelocity.y = 0;
+                objVelocity.x *= 0.7;
+                objVelocity.z *= 0.7;
+            }
+        }
+
+        function updateCyberMovement() {
+            if (!settingCyber) return;
+
+            const speed = isSprinting ? 1.5 : 0.8;
+            const direction = new THREE.Vector3();
+            const forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0;
+            forward.normalize();
+            const right = new THREE.Vector3();
+            right.crossVectors(forward, camera.up).normalize();
+
+            if (moveForward || joystickY < -0.2) direction.add(forward);
+            if (moveBackward || joystickY > 0.2) direction.sub(forward);
+            if (moveRight || joystickX > 0.2) direction.add(right);
+            if (moveLeft || joystickX < -0.2) direction.sub(right);
+
+            direction.normalize();
+
+            if (direction.length() > 0) {
+                playerVelocity.x = direction.x * speed;
+                playerVelocity.z = direction.z * speed;
+            } else {
+                playerVelocity.x = 0;
+                playerVelocity.z = 0;
+            }
+
+            playerVelocity.y -= 0.05; 
+            camera.position.add(playerVelocity);
+
+            let eyeHeight = isCrouching ? 5 : 10;
+            const floorLevel = -15 + eyeHeight;
+
+            if (camera.position.y < floorLevel) {
+                playerVelocity.y = 0;
+                camera.position.y = floorLevel;
+                canJump = true;
+            }
+
+            if (flashOn) {
+                flashLight.position.copy(camera.position);
+                const camDir = new THREE.Vector3();
+                camera.getWorldDirection(camDir);
+                flashLight.target.position.copy(camera.position).add(camDir);
+                flashLight.intensity = document.getElementById('sl-flash-int').value;
+            } else {
+                flashLight.intensity = 0;
+            }
+
+            // Compass Logic
+            const compassArrow = document.getElementById('compass-arrow');
+            if (compassArrow && settingCyber) {
+                const localPos = currentMesh.position.clone();
+                localPos.applyMatrix4(camera.matrixWorldInverse);
+                const angle = Math.atan2(localPos.x, -localPos.z);
+                const deg = THREE.MathUtils.radToDeg(angle);
+                compassArrow.style.transform = `rotate(${deg}deg)`;
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            frameCount++;
+            drawCanvas();
+            updateDominos();
+            updatePhysics();
+            updateCyberMovement();
+            
+            if (!settingCyber) {
+                controls.enabled = !isDragging;
+                controls.update();
+            } else {
+                controls.enabled = false;
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        initGrid();
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        const uiHeader = document.getElementById('ui-header');
+        const uiContent = document.getElementById('ui-content');
+        uiHeader.addEventListener('click', () => uiContent.classList.toggle('open'));
+
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        function switchTab(targetId) {
+            tabs.forEach(t => t.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+            const activeTab = document.querySelector(`[data-target="${targetId}"]`);
+            if(activeTab) activeTab.classList.add('active');
+            const content = document.getElementById(targetId);
+            if(content) content.classList.add('active');
+        }
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => switchTab(tab.dataset.target));
+        });
+
+        document.getElementById('btn-shape').addEventListener('click', (e) => {
+            isSphere = !isSphere;
+            const oldPos = currentMesh.position.clone();
+            const oldRot = currentMesh.rotation.clone();
+            scene.remove(currentMesh);
+            currentMesh = new THREE.Mesh(isSphere ? geometrySphere : geometryBox, material);
+            currentMesh.position.copy(oldPos);
+            currentMesh.rotation.copy(oldRot);
+            currentMesh.castShadow = true;
+            scene.add(currentMesh);
+            e.target.innerText = isSphere ? "Toggle Shape: Sphere" : "Toggle Shape: Cube";
+        });
+        document.getElementById('col-mesh').addEventListener('input', (e) => { meshColor = e.target.value; staticNeedsUpdate = true; });
+        document.getElementById('col-grid').addEventListener('input', (e) => { gridColor = e.target.value; staticNeedsUpdate = true; });
+        document.getElementById('chk-grid').addEventListener('change', (e) => { settingShowGrid = e.target.checked; staticNeedsUpdate = true; });
+        document.getElementById('chk-chars').addEventListener('change', (e) => { settingShowChars = e.target.checked; });
+        document.getElementById('sl-grid').addEventListener('input', (e) => { updateGridSize(e.target.value); });
+        document.getElementById('num-grid').addEventListener('input', (e) => { updateGridSize(e.target.value); });
+        
+        function updateGridSize(val) {
+            const v = parseInt(val);
+            if (v < 2) return;
+            rows = v;
+            document.getElementById('sl-grid').value = v;
+            document.getElementById('num-grid').value = v;
+            initGrid();
+        }
+        document.getElementById('sl-res').addEventListener('input', (e) => {
+            renderer.setPixelRatio(window.devicePixelRatio * parseFloat(e.target.value));
+        });
+
+        document.getElementById('col-sky').addEventListener('input', (e) => { 
+            scene.background = new THREE.Color(e.target.value); 
+            scene.fog.color = new THREE.Color(e.target.value);
+        });
+        document.getElementById('sl-luminance').addEventListener('input', (e) => { ambientLight.intensity = parseFloat(e.target.value); });
+        document.getElementById('col-floor').addEventListener('input', (e) => { floorMesh.material.color.set(e.target.value); });
+
+        const btnShuffle = document.getElementById('btn-shuffle');
+        document.getElementById('chk-randomizer').addEventListener('change', (e) => { 
+            settingRandomizer = e.target.checked;
+            btnShuffle.disabled = settingRandomizer;
+        });
+        btnShuffle.addEventListener('click', () => {
+             for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    if (!gridData[y][x].frozen) gridData[y][x].char = chars[Math.floor(Math.random() * chars.length)];
+                }
+            }
+        });
+        document.getElementById('chk-spread').addEventListener('change', (e) => { settingSpread = e.target.checked; });
+
+        const mobileUi = document.getElementById('mobile-ui');
+        const interactionUi = document.getElementById('interaction-ui');
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const cyberTabBtn = document.getElementById('tab-cyber-btn');
+        const rowFloor = document.getElementById('row-floor');
+        const rowGravity = document.getElementById('row-gravity');
+        const cyberOverlay = document.getElementById('cyber-overlay');
+        const crosshair = document.getElementById('crosshair');
+        const compass = document.getElementById('compass');
+        
+        let overlayTimeout;
+
+        document.getElementById('chk-physics').addEventListener('change', (e) => { 
+            settingPhysics = e.target.checked;
+            floorMesh.visible = settingPhysics;
+            
+            if (settingPhysics) {
+                rowFloor.classList.add('visible');
+                rowGravity.classList.add('visible');
+                cyberTabBtn.classList.add('visible');
+                if(isMobile) interactionUi.style.display = 'flex';
+            } else {
+                rowFloor.classList.remove('visible');
+                rowGravity.classList.remove('visible');
+                cyberTabBtn.classList.remove('visible');
+                if (document.getElementById('tab-cyber').classList.contains('active')) {
+                    switchTab('tab-visual');
+                }
+                currentMesh.position.set(0,0,0);
+                currentMesh.rotation.set(0,0,0);
+                settingCyber = false;
+                document.getElementById('chk-cyberspace').checked = false;
+                exitCyberMode();
+                if(isMobile) interactionUi.style.display = 'none';
+            }
+        });
+        document.getElementById('sl-gravity').addEventListener('input', (e) => { settingGravity = parseFloat(e.target.value); });
+
+        const chkCyber = document.getElementById('chk-cyberspace');
+        chkCyber.addEventListener('change', (e) => {
+            settingCyber = e.target.checked;
+            if (settingCyber) {
+                camera.position.y = -5;
+                camera.lookAt(0, 0, 0);
+                
+                if (isMobile) {
+                    mobileUi.style.display = 'block';
+                } else {
+                    cyberOverlay.style.display = 'block';
+                    crosshair.style.display = 'block';
+                    
+                    cyberOverlay.style.opacity = '1';
+                    if (overlayTimeout) clearTimeout(overlayTimeout);
+                    overlayTimeout = setTimeout(() => {
+                        cyberOverlay.style.opacity = '0';
+                        setTimeout(() => { if(cyberOverlay.style.opacity === '0') cyberOverlay.style.display = 'none'; }, 1000);
+                    }, 5000);
+                }
+                compass.style.display = 'flex';
+            } else {
+                exitCyberMode();
+            }
+        });
+
+        function exitCyberMode() {
+            flashOn = false;
+            flashLight.intensity = 0;
+            mobileUi.style.display = 'none';
+            cyberOverlay.style.display = 'none';
+            crosshair.style.display = 'none';
+            compass.style.display = 'none';
+            if (document.pointerLockElement === document.body) document.exitPointerLock();
+            camera.position.set(0, 0, 25);
+            camera.lookAt(0, 0, 0);
+            isHoldingDesktop = false;
+            if(overlayTimeout) clearTimeout(overlayTimeout);
+            camera.rotation.set(0,0,0);
+        }
+
+        document.getElementById('col-flash').addEventListener('input', (e) => { flashLight.color.set(e.target.value); });
+        document.getElementById('sl-flash-dist').addEventListener('input', (e) => { flashLight.distance = parseFloat(e.target.value); });
+
+        // --- Controls Desktop ---
+        document.addEventListener('keydown', (e) => {
+            if (!settingCyber) return;
+            switch(e.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyD': moveRight = true; break;
+                case 'Space': if (canJump) { playerVelocity.y = 1.0; canJump = false; } break;
+                case 'ShiftLeft': isSprinting = true; break;
+                case 'ControlLeft': isCrouching = true; break;
+                case 'KeyF': flashOn = !flashOn; break;
+                case 'KeyT': 
+                    if (isHoldingDesktop) {
+                         releaseObject(2); 
+                         isHoldingDesktop = false;
+                    }
+                    break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            if (!settingCyber) return;
+            switch(e.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyD': moveRight = false; break;
+                case 'ShiftLeft': isSprinting = false; break;
+                case 'ControlLeft': isCrouching = false; break;
+            }
+        });
+
+        document.addEventListener('mousedown', (e) => {
+            if (!settingCyber || isMobile || e.target.closest('#ui-wrapper')) return;
+
+            // Right Click: Lock Camera for look
+            if (e.button === 2) {
+                document.body.requestPointerLock();
+            }
+            // Left Click: Grab Object
+            if (e.button === 0) {
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera); 
+                const intersects = raycaster.intersectObject(currentMesh);
+                if (intersects.length > 0 && currentMesh.position.distanceTo(camera.position) < 25) {
+                    isHoldingDesktop = true;
+                }
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (!settingCyber || isMobile) return;
+
+            // Right Click Release: Unlock Camera
+            if (e.button === 2) {
+                document.exitPointerLock();
+            }
+            // Left Click Release: Drop Object
+            if (e.button === 0) {
+                isHoldingDesktop = false;
+            }
+        });
+
+        document.addEventListener('contextmenu', (e) => { e.preventDefault(); });
+
+        // Camera Rotation (Fixed: Checks if Right Button is held)
+        document.addEventListener('mousemove', (e) => {
+            // Check if Right Click is held down (2) OR Pointer is locked
+            if (settingCyber && !isMobile && ((e.buttons & 2) === 2 || document.pointerLockElement === document.body)) {
+                camera.rotation.y -= e.movementX * 0.002;
+                camera.rotation.x -= e.movementY * 0.002;
+                camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+            }
+        });
+
+        // --- Mobile Logic ---
+        const joystickArea = document.getElementById('joystick-area');
+        const joystickStick = document.getElementById('joystick-stick');
+        let joystickX = 0, joystickY = 0, joystickTouchId = null;
+
+        joystickArea.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            joystickTouchId = touch.identifier;
+            updateJoystick(touch.clientX, touch.clientY);
+        });
+        joystickArea.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            for (let i=0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === joystickTouchId) updateJoystick(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+            }
+        });
+        joystickArea.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            joystickX = 0; joystickY = 0;
+            joystickStick.style.transform = `translate(-50%, -50%)`;
+        });
+        function updateJoystick(x, y) {
+            const rect = joystickArea.getBoundingClientRect();
+            const centerX = rect.left + rect.width/2;
+            const centerY = rect.top + rect.height/2;
+            let dx = x - centerX, dy = y - centerY;
+            const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 35);
+            const angle = Math.atan2(dy, dx);
+            joystickStick.style.transform = `translate(calc(-50% + ${Math.cos(angle)*dist}px), calc(-50% + ${Math.sin(angle)*dist}px))`;
+            joystickX = (Math.cos(angle)*dist) / 35;
+            joystickY = (Math.sin(angle)*dist) / 35;
+        }
+
+        document.addEventListener('touchstart', (e) => {
+            if(!settingCyber || !isMobile) return;
+            if(e.target.closest('#mobile-buttons') || e.target.closest('#joystick-area') || e.target.closest('#ui-wrapper') || e.target.closest('#interaction-ui')) return;
+
+            const touch = e.touches[0];
+            if(touch.clientX > window.innerWidth / 2) {
+                isLooking = true;
+                lastLookX = touch.clientX;
+                lastLookY = touch.clientY;
+            }
+        });
+        
+        document.addEventListener('touchmove', (e) => {
+            if(!settingCyber || !isMobile || !isLooking) return;
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - lastLookX;
+            const deltaY = touch.clientY - lastLookY;
+            camera.rotation.y -= deltaX * 0.005;
+            camera.rotation.x -= deltaY * 0.005;
+            camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+            lastLookX = touch.clientX;
+            lastLookY = touch.clientY;
+        });
+
+        document.addEventListener('touchend', () => { isLooking = false; });
+
+        document.getElementById('m-sprint').addEventListener('touchstart', (e)=>{ e.preventDefault(); isSprinting=true; });
+        document.getElementById('m-sprint').addEventListener('touchend', (e)=>{ e.preventDefault(); isSprinting=false; });
+        document.getElementById('m-jump').addEventListener('touchstart', (e)=>{ e.preventDefault(); if(canJump){playerVelocity.y=1.0; canJump=false;} });
+        document.getElementById('m-crouch').addEventListener('touchstart', (e)=>{ e.preventDefault(); isCrouching=true; });
+        document.getElementById('m-crouch').addEventListener('touchend', (e)=>{ e.preventDefault(); isCrouching=false; });
+        document.getElementById('m-flash').addEventListener('touchstart', (e)=>{ e.preventDefault(); flashOn=!flashOn; });
+
+        const btnGrab = document.getElementById('m-grab');
+        const btnDrop = document.getElementById('m-drop');
+        const btnThrow = document.getElementById('m-throw');
+
+        btnGrab.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera); 
+            const intersects = raycaster.intersectObject(currentMesh);
+            if (currentMesh.position.distanceTo(camera.position) < 25) {
+                isHoldingMobile = true;
+                btnGrab.style.display = 'none';
+                btnDrop.style.display = 'flex';
+                btnThrow.style.display = 'flex';
+            }
+        });
+
+        btnDrop.addEventListener('touchstart', (e) => { e.preventDefault(); releaseObject(0); });
+        btnThrow.addEventListener('touchstart', (e) => { e.preventDefault(); releaseObject(2); });
+
+        function releaseObject(power) {
+            isHoldingMobile = false;
+            btnGrab.style.display = 'flex';
+            btnDrop.style.display = 'none';
+            btnThrow.style.display = 'none';
+            if (power > 0) {
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+                objVelocity.copy(forward).multiplyScalar(power);
+                objVelocity.y += 0.5; 
+            }
+        }
+
+        window.addEventListener('pointerdown', (event) => {
+            if (event.target.closest('#ui-wrapper') || event.target.closest('#mobile-ui') || settingCyber) return;
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(currentMesh);
+            if (intersects.length > 0) {
+                if (settingPhysics) {
+                    isDragging = true;
+                    controls.enabled = false;
+                    dragPlane.normal.copy(camera.position).normalize();
+                    dragPlane.constant = -currentMesh.position.dot(dragPlane.normal);
+                    raycasterPlane.setFromCamera(mouse, camera);
+                    const planeIntersect = new THREE.Vector3();
+                    raycasterPlane.ray.intersectPlane(dragPlane, planeIntersect);
+                    previousDragPosition.copy(planeIntersect);
+                } else {
+                    const uv = intersects[0].uv;
+                    let col = Math.floor(uv.x * cols);
+                    let row = Math.floor((1 - uv.y) * rows);
+                    if (col >= cols) col = cols - 1; if (row >= rows) row = rows - 1;
+                    if (row >= 0 && row < rows && col >= 0 && col < cols) {
+                        if (settingSpread) {
+                            const cell = gridData[row][col];
+                            const newState = !cell.frozen;
+                            activeWaveState = newState;
+                            cell.frozen = newState;
+                            if (newState) cell.frozenChar = cell.char;
+                        } else {
+                            const isPaused = gridData[0][0].frozen; 
+                            const newState = !isPaused;
+                            for (let y = 0; y < rows; y++) {
+                                for (let x = 0; x < cols; x++) {
+                                    gridData[y][x].frozen = newState;
+                                    if (newState) gridData[y][x].frozenChar = gridData[y][x].char;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        window.addEventListener('pointermove', (event) => {
+            if (isDragging && settingPhysics && !settingCyber) {
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                raycasterPlane.setFromCamera(mouse, camera);
+                const planeIntersect = new THREE.Vector3();
+                raycasterPlane.ray.intersectPlane(dragPlane, planeIntersect);
+                if (planeIntersect) {
+                    const delta = new THREE.Vector3().subVectors(planeIntersect, previousDragPosition);
+                    currentMesh.position.add(delta);
+                    objVelocity.copy(delta);
+                    previousDragPosition.copy(planeIntersect);
+                }
+            }
+        });
+        window.addEventListener('pointerup', () => {
+            if (isDragging) { isDragging = false; controls.enabled = true; objVelocity.multiplyScalar(2); }
+        });
+    </script>
+</body>
+</html>
