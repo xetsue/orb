@@ -188,6 +188,7 @@
             align-items: flex-start;
             gap: 10px;
             z-index: 90;
+            pointer-events: auto;
         }
 
         #compass {
@@ -217,6 +218,20 @@
             border: 1px solid #444;
             font-size: 12px;
             font-family: monospace;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        #time-display {
+             color: white;
+             font-size: 12px;
+             margin-top: 5px;
+             font-family: monospace;
+             text-shadow: 1px 1px 0 #000;
+             display: none;
+             cursor: pointer;
+             mix-blend-mode: difference;
+             font-weight: bold;
         }
 
         #npc-container {
@@ -351,6 +366,7 @@
     <div id="hud-top-left">
         <div id="compass"><span id="compass-arrow">▲</span></div>
         <div id="coords">X: 0 Y: 0</div>
+        <div id="time-display">12:00 PM</div>
     </div>
     
     <div id="npc-container"></div>
@@ -495,6 +511,11 @@
                     <span class="label">Mono NPCs/Buildings</span>
                     <input type="checkbox" id="chk-mono" checked>
                 </div>
+                <div class="row">
+                    <span class="label">NPC Spawn Rate</span>
+                    <input type="range" id="sl-npc-rate" min="0.1" max="1" step="0.1" value="0.6">
+                    <input type="number" id="num-npc-rate" value="0.6">
+                </div>
 
                 <div class="row" style="margin-top:10px; border-bottom:1px solid #333; padding-bottom:5px;">
                     <span class="label" style="color:white;">Flashlight Settings</span>
@@ -505,8 +526,8 @@
                 </div>
                 <div class="row">
                     <span class="label">Brightness</span>
-                    <input type="range" id="sl-flash-int" min="0" max="5" step="0.1" value="2">
-                    <input type="number" id="num-flash-int" value="2">
+                    <input type="range" id="sl-flash-int" min="0" max="5" step="0.1" value="4">
+                    <input type="number" id="num-flash-int" value="4">
                 </div>
                 <div class="row">
                     <span class="label">Distance</span>
@@ -522,7 +543,25 @@
         </div>
     </div>
 
+    <div id="mobile-ui">
+        <div id="joystick-area">
+            <div id="joystick-stick"></div>
+        </div>
+        <div id="mobile-buttons">
+            <div class="mob-btn" id="m-sprint">SPRINT</div>
+            <div class="mob-btn" id="m-jump">JUMP</div>
+            <div class="mob-btn" id="m-crouch">CROUCH</div>
+            <div class="mob-btn" id="m-flash">LIGHT</div>
+        </div>
+        <div id="interaction-ui">
+            <div class="interact-btn" id="m-grab">GRAB</div>
+            <div class="interact-btn drop" id="m-drop" style="display:none;">LET GO</div>
+            <div class="interact-btn throw" id="m-throw" style="display:none;">THROW</div>
+        </div>
+    </div>
+
     <script src="js/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.146.0/examples/js/utils/BufferGeometryUtils.js"></script>
     <script src="https://unpkg.com/three@0.146.0/examples/js/postprocessing/EffectComposer.js"></script>
     <script src="https://unpkg.com/three@0.146.0/examples/js/postprocessing/RenderPass.js"></script>
     <script src="https://unpkg.com/three@0.146.0/examples/js/postprocessing/ShaderPass.js"></script>
@@ -536,15 +575,14 @@
         scene.background = new THREE.Color(0x000000);
         scene.fog = new THREE.Fog(0x000000, 20, 100); 
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100); 
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000); 
         camera.position.z = 25;
         camera.rotation.order = 'YXZ'; 
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        renderer.toneMapping = THREE.ReinhardToneMapping;
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+        renderer.shadowMap.enabled = false; 
         document.body.appendChild(renderer.domElement);
 
         const renderScene = new THREE.RenderPass(scene, camera);
@@ -573,8 +611,6 @@
         flashLight.penumbra = 0.5;
         flashLight.decay = 2;
         flashLight.distance = 50;
-        flashLight.castShadow = true;
-        flashLight.shadow.bias = -0.0001;
         flashLight.target.position.set(0, 0, -1);
         scene.add(flashLight);
         scene.add(flashLight.target);
@@ -604,13 +640,13 @@
         let aimLocked = false;
         let settingBloom = true;
         let settingMono = true;
+        let settingNpcRate = 0.6;
         
         const floorGeometry = new THREE.PlaneGeometry(300, 300);
-        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
+        const floorMaterial = new THREE.MeshLambertMaterial({ color: 0x222222 });
         const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
         floorMesh.rotation.x = -Math.PI / 2;
         floorMesh.position.y = -15;
-        floorMesh.receiveShadow = true;
         floorMesh.visible = false;
         scene.add(floorMesh);
 
@@ -629,18 +665,14 @@
         texture.minFilter = THREE.LinearFilter;
         texture.magFilter = THREE.LinearFilter;
 
-        let geometrySphere = new THREE.SphereGeometry(10, 64, 64);
+        let geometrySphere = new THREE.SphereGeometry(10, 24, 24); 
         let geometryBox = new THREE.BoxGeometry(14, 14, 14);
         
-        const material = new THREE.MeshStandardMaterial({ 
-            map: texture, 
-            roughness: 0.5,
-            metalness: 0.1
+        const material = new THREE.MeshLambertMaterial({ 
+            map: texture
         });
         
         let currentMesh = new THREE.Mesh(geometrySphere, material);
-        currentMesh.castShadow = true;
-        currentMesh.receiveShadow = true;
         scene.add(currentMesh);
 
         let isSphere = true;
@@ -668,39 +700,33 @@
 
         const brGroup = new THREE.Group();
         scene.add(brGroup);
+        const abdGroup = new THREE.Group();
+        scene.add(abdGroup);
+
         const brWallGeo = new THREE.BoxGeometry(10, 20, 10);
-        
         const noiseCanvas = document.createElement('canvas');
-        noiseCanvas.width = 256; noiseCanvas.height = 256;
+        noiseCanvas.width = 64; noiseCanvas.height = 64; 
         const nCtx = noiseCanvas.getContext('2d');
-        nCtx.fillStyle = '#C2B280'; 
-        nCtx.fillRect(0,0,256,256);
-        for(let i=0; i<8000; i++) {
+        nCtx.fillStyle = '#C2B280'; nCtx.fillRect(0,0,64,64);
+        for(let i=0; i<500; i++) {
             nCtx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
-            const x = Math.random()*256;
-            const y = Math.random()*256;
-            nCtx.fillRect(x, y, 2, 2);
+            nCtx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
         }
         const wallTex = new THREE.CanvasTexture(noiseCanvas);
+        const brWallMat = new THREE.MeshLambertMaterial({map: wallTex});
         
         const tileCanvas = document.createElement('canvas');
-        tileCanvas.width = 256; tileCanvas.height = 256;
+        tileCanvas.width = 64; tileCanvas.height = 64; 
         const tCtx = tileCanvas.getContext('2d');
-        tCtx.fillStyle = '#A6A68C'; 
-        tCtx.fillRect(0,0,256,256);
-        tCtx.strokeStyle = 'rgba(0,0,0,0.15)';
-        tCtx.lineWidth = 4;
-        tCtx.strokeRect(0,0,256,256); 
+        tCtx.fillStyle = '#A6A68C'; tCtx.fillRect(0,0,64,64);
+        tCtx.strokeStyle = 'rgba(0,0,0,0.15)'; tCtx.lineWidth = 2; tCtx.strokeRect(0,0,64,64); 
         const ceilTex = new THREE.CanvasTexture(tileCanvas);
-        
-        const brWallMat = new THREE.MeshStandardMaterial({map: wallTex});
-        const brFloorGeo = new THREE.PlaneGeometry(10, 10);
-        const brFloorMat = new THREE.MeshStandardMaterial({color: 0x554433}); 
-        const brCeilMat = new THREE.MeshStandardMaterial({map: ceilTex});
-        
-        const brLightGeo = new THREE.PlaneGeometry(2, 8);
+        const brCeilMat = new THREE.MeshLambertMaterial({map: ceilTex});
+
+        const brFloorMat = new THREE.MeshLambertMaterial({color: 0x554433}); 
         const brLightMat = new THREE.MeshBasicMaterial({color: 0xffffff, side: THREE.DoubleSide});
-        
+        const brLightGeo = new THREE.PlaneGeometry(2, 8);
+
         const doorCanvas = document.createElement('canvas');
         doorCanvas.width = 64; doorCanvas.height = 128;
         const dCtx = doorCanvas.getContext('2d');
@@ -710,18 +736,42 @@
         dCtx.strokeRect(5,5,54,118);
         const doorTex = new THREE.CanvasTexture(doorCanvas);
         const brDoorGeo = new THREE.BoxGeometry(6, 16, 11);
-        const brDoorMat = new THREE.MeshStandardMaterial({map: doorTex});
-        
-        const abdGroup = new THREE.Group();
-        scene.add(abdGroup);
+        const brDoorMat = new THREE.MeshLambertMaterial({map: doorTex});
+
         const abdChunkSize = 200; 
-        
         const brChunkSize = 6; 
-        const brTileSize = 10;
+        const brTileSize = 14; 
         let loadedChunks = {};
         let loadedAbdChunks = {};
         let interactables = [];
         let npcs = [];
+        let debris = [];
+        let rainSystem = null;
+
+        const dayCycleDuration = 300; 
+        let dayTime = 0;
+        let rainTimer = 0;
+        let isRaining = false;
+        
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0);
+        scene.add(sunLight);
+        scene.add(sunLight.target);
+        
+        const moonGeo = new THREE.SphereGeometry(20, 8, 8);
+        const moonMat = new THREE.MeshBasicMaterial({color: 0xffffaa});
+        const moonMesh = new THREE.Mesh(moonGeo, moonMat);
+        scene.add(moonMesh);
+        moonMesh.visible = false;
+        
+        const starsGeo = new THREE.BufferGeometry();
+        const starCount = 500;
+        const starPos = new Float32Array(starCount * 3);
+        for(let i=0; i<starCount*3; i++) starPos[i] = (Math.random()-0.5) * 1000;
+        starsGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        const starsMat = new THREE.PointsMaterial({color:0xffffff, size: 1.5, sizeAttenuation:false});
+        const starSystem = new THREE.Points(starsGeo, starsMat);
+        scene.add(starSystem);
+        starSystem.visible = false;
 
         function initGrid() {
             cols = rows * 2; 
@@ -872,30 +922,41 @@
         function pseudoRandom(x, y) {
             return Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
         }
+        
+        function getTerrainHeight(x, z) {
+            let h = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 10;
+            h += Math.sin(x * 0.01 + z*0.02) * 20;
+            return h - 15;
+        }
 
         function updateBackrooms() {
-            const px = Math.floor(camera.position.x / (brChunkSize * brTileSize));
-            const pz = Math.floor(camera.position.z / (brChunkSize * brTileSize));
+            const cx = Math.floor(camera.position.x / (brChunkSize * brTileSize));
+            const cz = Math.floor(camera.position.z / (brChunkSize * brTileSize));
+            const viewDist = 2; 
 
             const neededKeys = [];
-            for (let dx = -1; dx <= 1; dx++) {
-                for (let dz = -1; dz <= 1; dz++) {
-                    neededKeys.push(`${px + dx},${pz + dz}`);
+            for (let dx = -viewDist; dx <= viewDist; dx++) {
+                for (let dz = -viewDist; dz <= viewDist; dz++) {
+                    neededKeys.push(`${cx + dx},${cz + dz}`);
                 }
             }
 
             Object.keys(loadedChunks).forEach(key => {
                 if (!neededKeys.includes(key)) {
-                    brGroup.remove(loadedChunks[key]);
-                    interactables = interactables.filter(obj => !loadedChunks[key].children.includes(obj));
+                    const chunk = loadedChunks[key];
+                    chunk.traverse(c => {
+                        if(c.geometry) c.geometry.dispose();
+                    });
+                    brGroup.remove(chunk);
+                    interactables = interactables.filter(obj => !chunk.children.includes(obj));
                     delete loadedChunks[key];
                 }
             });
 
             neededKeys.forEach(key => {
                 if (!loadedChunks[key]) {
-                    const [cx, cz] = key.split(',').map(Number);
-                    const chunkMesh = generateChunk(cx, cz);
+                    const [kx, kz] = key.split(',').map(Number);
+                    const chunkMesh = generateChunk(kx, kz);
                     loadedChunks[key] = chunkMesh;
                     brGroup.add(chunkMesh);
                 }
@@ -904,6 +965,9 @@
 
         function generateChunk(cx, cz) {
             const meshGroup = new THREE.Group();
+            const wallGeoms = [];
+            const floorGeoms = [];
+            const ceilGeoms = [];
             
             for(let x=0; x<brChunkSize; x++) {
                 for(let z=0; z<brChunkSize; z++) {
@@ -914,42 +978,56 @@
                     const posX = wx * brTileSize;
                     const posZ = wz * brTileSize;
                     
-                    const fl = new THREE.Mesh(brFloorGeo, brFloorMat);
-                    fl.rotation.x = -Math.PI/2;
-                    fl.position.set(posX, -15, posZ);
-                    fl.receiveShadow = true;
-                    meshGroup.add(fl);
+                    const flGeo = new THREE.PlaneGeometry(brTileSize, brTileSize);
+                    flGeo.rotateX(-Math.PI/2);
+                    flGeo.translate(posX, -15, posZ);
+                    floorGeoms.push(flGeo);
                     
-                    const cl = new THREE.Mesh(brFloorGeo, brCeilMat);
-                    cl.rotation.x = Math.PI/2;
-                    cl.position.set(posX, 5, posZ);
-                    meshGroup.add(cl);
+                    const clGeo = new THREE.PlaneGeometry(brTileSize, brTileSize);
+                    clGeo.rotateX(Math.PI/2);
+                    clGeo.translate(posX, 10, posZ); 
+                    ceilGeoms.push(clGeo);
 
                     if (pseudoRandom(wx+0.1, wz+0.1) > 0.8) {
                         const light = new THREE.Mesh(brLightGeo, brLightMat);
                         light.rotation.x = Math.PI/2;
-                        light.position.set(posX, 4.9, posZ);
+                        light.position.set(posX, 9.9, posZ);
                         meshGroup.add(light);
                     }
 
                     if (rand > 0.7) {
-                        const wall = new THREE.Mesh(brWallGeo, brWallMat);
-                        wall.position.set(posX, -5, posZ);
-                        wall.castShadow = true;
-                        wall.receiveShadow = true;
-                        meshGroup.add(wall);
-
-                        if (rand > 0.90) {
+                        if (rand > 0.96) { 
                             const door = new THREE.Mesh(brDoorGeo, brDoorMat);
                             if (pseudoRandom(wx, wz+0.5) > 0.5) door.rotation.y = Math.PI/2;
                             door.position.set(posX, -6, posZ);
                             door.userData = { type: 'door' };
                             meshGroup.add(door);
                             interactables.push(door);
+                        } else {
+                            const wGeo = brWallGeo.clone();
+                            wGeo.translate(posX, -5, posZ);
+                            wallGeoms.push(wGeo);
                         }
                     }
                 }
             }
+            
+            if(wallGeoms.length > 0) {
+                const mergedWall = THREE.BufferGeometryUtils.mergeBufferGeometries(wallGeoms);
+                const wallMesh = new THREE.Mesh(mergedWall, brWallMat);
+                meshGroup.add(wallMesh);
+            }
+            if(floorGeoms.length > 0) {
+                const mergedFloor = THREE.BufferGeometryUtils.mergeBufferGeometries(floorGeoms);
+                const floorMesh = new THREE.Mesh(mergedFloor, brFloorMat);
+                meshGroup.add(floorMesh);
+            }
+            if(ceilGeoms.length > 0) {
+                const mergedCeil = THREE.BufferGeometryUtils.mergeBufferGeometries(ceilGeoms);
+                const ceilMesh = new THREE.Mesh(mergedCeil, brCeilMat);
+                meshGroup.add(ceilMesh);
+            }
+            
             return meshGroup;
         }
 
@@ -958,27 +1036,35 @@
             const gridX = Math.round(x / brTileSize);
             const gridZ = Math.round(z / brTileSize);
             const rand = pseudoRandom(gridX, gridZ);
-            return rand > 0.7; 
+            return rand > 0.7 && rand <= 0.96; 
         }
         
         class NPC {
             constructor(x, z) {
                 const group = new THREE.Group();
                 const col = settingMono ? new THREE.Color(0xffffff) : new THREE.Color().setHSL(Math.random(), 0.7, 0.5);
-                const cone = new THREE.Mesh(new THREE.ConeGeometry(2, 6, 8), new THREE.MeshStandardMaterial({color: col}));
-                cone.position.y = -12;
-                const head = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshStandardMaterial({color: col}));
-                head.position.y = -8;
+                const mat = new THREE.MeshLambertMaterial({color: col, emissive: col, emissiveIntensity: 1});
+                const cone = new THREE.Mesh(new THREE.ConeGeometry(3, 8, 8), mat);
+                cone.position.y = 4; 
+                const head = new THREE.Mesh(new THREE.SphereGeometry(2, 8, 8), mat);
+                head.position.y = 9;
                 group.add(cone); group.add(head);
-                group.position.set(x, 0, z);
+                
+                const y = getTerrainHeight(x, z);
+                group.position.set(x, y, z);
+                
                 this.mesh = group;
-                this.vel = new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize().multiplyScalar(0.1);
+                this.vel = new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize().multiplyScalar(0.15);
                 this.timer = 0;
                 this.isPaused = false;
                 
                 this.textEl = document.createElement('div');
                 this.textEl.className = 'npc-dialogue';
-                const phrases = ["Hello, are you lost too?", "I have been roaming this land for so long.", "I want to go home.", "Hi there.", "...", "I can't remember my name.", "I lost something here.", "I lost someone here."];
+                const phrases = [
+                    "Hello, are you lost too?", "I have been roaming this land for so long.", "I want to go home.", "Hi there.", "...", 
+                    "I can't remember my name.", "I lost something here.", "I lost someone here.", "I saw a way out...", "Is this real?", 
+                    "The noise...", "Don't look up.", "It never ends.", "I miss the sun.", "Who are you?", "System failure.", "Lost connection."
+                ];
                 this.textEl.innerText = phrases[Math.floor(Math.random()*phrases.length)];
                 document.getElementById('npc-container').appendChild(this.textEl);
                 this.mesh.userData = { npc: this };
@@ -990,22 +1076,23 @@
                 if(!this.isPaused) {
                     this.timer++;
                     if(this.timer > 200) {
-                        this.vel.set(Math.random()-0.5, 0, Math.random()-0.5).normalize().multiplyScalar(0.1);
+                        this.vel.set(Math.random()-0.5, 0, Math.random()-0.5).normalize().multiplyScalar(0.15);
                         this.timer = 0;
                     }
                     this.mesh.position.add(this.vel);
+                    this.mesh.position.y = getTerrainHeight(this.mesh.position.x, this.mesh.position.z);
                 }
                 
-                const pos = this.mesh.position.clone().add(new THREE.Vector3(0, -4, 0));
+                const pos = this.mesh.position.clone().add(new THREE.Vector3(0, 12, 0));
                 pos.project(camera);
-                const x = (pos.x * .5 + .5) * window.innerWidth;
-                const y = (-(pos.y * .5) + .5) * window.innerHeight;
                 
-                if (pos.z < 1 && this.mesh.position.distanceTo(camera.position) < 50) {
+                const isVisible = (pos.z < 1 && this.mesh.position.distanceTo(camera.position) < 80);
+
+                if (isVisible && this.textEl.style.display === 'block') {
+                    const x = (pos.x * .5 + .5) * window.innerWidth;
+                    const y = (-(pos.y * .5) + .5) * window.innerHeight;
                     this.textEl.style.left = x + 'px';
                     this.textEl.style.top = y + 'px';
-                } else {
-                     this.textEl.style.display = 'none';
                 }
             }
             interact() {
@@ -1023,27 +1110,75 @@
         }
 
         function updateAbandoned() {
-            const px = Math.floor(camera.position.x / abdChunkSize);
-            const pz = Math.floor(camera.position.z / abdChunkSize);
+            dayTime += 1/60; 
+            if(dayTime > dayCycleDuration) dayTime = 0;
+            const progress = dayTime / dayCycleDuration;
+            const angle = progress * Math.PI * 2;
+            
+            const sunHeight = Math.sin(angle);
+            const skyColor = new THREE.Color().setHSL(0.6, 0.2, Math.max(0.02, sunHeight * 0.5));
+            const fogColor = new THREE.Color().setHSL(0.6, 0.2, Math.max(0.02, sunHeight * 0.5));
+            scene.background = skyColor;
+            scene.fog.color = fogColor;
+
+            sunLight.position.set(Math.sin(angle)*100, Math.cos(angle)*100, 0);
+            sunLight.intensity = Math.max(0, Math.cos(angle) * 1.5);
+            
+            if(Math.cos(angle) < -0.2) {
+                moonMesh.visible = true;
+                moonMesh.position.set(-Math.sin(angle)*200, -Math.cos(angle)*200, 0);
+                moonMesh.lookAt(camera.position);
+                starSystem.visible = true;
+            } else {
+                moonMesh.visible = false;
+                starSystem.visible = false;
+            }
+            
+            if (!isRaining && Math.random() < 0.001) {
+                isRaining = true;
+                rainTimer = 127;
+                createRain();
+            }
+            if (isRaining) {
+                rainTimer -= 1/60;
+                updateRain();
+                if (rainTimer <= 0) {
+                    isRaining = false;
+                    if(rainSystem) { scene.remove(rainSystem); rainSystem.geometry.dispose(); rainSystem = null; }
+                }
+            }
+            
+            const hours = Math.floor(progress * 24);
+            const mins = Math.floor((progress * 24 % 1) * 60);
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const dispH = hours % 12 || 12;
+            const dispM = mins < 10 ? '0'+mins : mins;
+            document.getElementById('time-display').innerText = `${dispH}:${dispM} ${ampm}`;
+
+            const cx = Math.floor(camera.position.x / abdChunkSize);
+            const cz = Math.floor(camera.position.z / abdChunkSize);
+            const viewDist = 1; 
             
             const neededKeys = [];
-             for (let dx = -1; dx <= 1; dx++) {
-                for (let dz = -1; dz <= 1; dz++) {
-                    neededKeys.push(`${px + dx},${pz + dz}`);
+             for (let dx = -viewDist; dx <= viewDist; dx++) {
+                for (let dz = -viewDist; dz <= viewDist; dz++) {
+                    neededKeys.push(`${cx + dx},${cz + dz}`);
                 }
             }
             
             Object.keys(loadedAbdChunks).forEach(key => {
                 if(!neededKeys.includes(key)) {
-                    abdGroup.remove(loadedAbdChunks[key]);
+                    const chunk = loadedAbdChunks[key];
+                    chunk.traverse(c => { if(c.geometry) c.geometry.dispose(); });
+                    abdGroup.remove(chunk);
                     delete loadedAbdChunks[key];
                 }
             });
             
             neededKeys.forEach(key => {
                 if(!loadedAbdChunks[key]) {
-                    const [cx, cz] = key.split(',').map(Number);
-                    const chunk = generateAbdChunk(cx, cz);
+                    const [kx, kz] = key.split(',').map(Number);
+                    const chunk = generateAbdChunk(kx, kz);
                     loadedAbdChunks[key] = chunk;
                     abdGroup.add(chunk);
                 }
@@ -1052,41 +1187,98 @@
             npcs.forEach(npc => npc.update());
         }
 
+        function createRain() {
+            const geo = new THREE.BufferGeometry();
+            const count = 1000;
+            const pos = new Float32Array(count * 3);
+            for(let i=0; i<count*3; i+=3) {
+                pos[i] = (Math.random()-0.5)*100;
+                pos[i+1] = Math.random()*50;
+                pos[i+2] = (Math.random()-0.5)*100;
+            }
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            const mat = new THREE.PointsMaterial({color: 0xaaaaaa, size: 0.2, transparent: true, opacity: 0.6});
+            rainSystem = new THREE.Points(geo, mat);
+            scene.add(rainSystem);
+        }
+
+        function updateRain() {
+            if(!rainSystem) return;
+            const pos = rainSystem.geometry.attributes.position.array;
+            for(let i=1; i<pos.length; i+=3) {
+                pos[i] -= 1;
+                if(pos[i] < -20) pos[i] = 50;
+            }
+            rainSystem.geometry.attributes.position.needsUpdate = true;
+            rainSystem.position.set(camera.position.x, 0, camera.position.z);
+        }
+
         function generateAbdChunk(cx, cz) {
             const group = new THREE.Group();
             const bx = cx * abdChunkSize;
             const bz = cz * abdChunkSize;
             
-            const fl = new THREE.Mesh(new THREE.PlaneGeometry(abdChunkSize, abdChunkSize), new THREE.MeshStandardMaterial({color: 0x222222}));
-            fl.rotation.x = -Math.PI/2;
-            fl.position.set(bx + abdChunkSize/2, -15.1, bz + abdChunkSize/2);
-            group.add(fl);
+            const segs = 10;
+            const fl = new THREE.PlaneGeometry(abdChunkSize, abdChunkSize, segs, segs);
+            const pos = fl.attributes.position;
+            for(let i=0; i<pos.count; i++) {
+                const x = pos.getX(i) + bx + abdChunkSize/2; 
+                const z = -pos.getY(i) + bz + abdChunkSize/2; 
+                pos.setZ(i, getTerrainHeight(x, z)); 
+            }
+            fl.computeVertexNormals();
+            fl.rotateX(-Math.PI/2);
+            fl.translate(bx + abdChunkSize/2, 0, bz + abdChunkSize/2);
+            const flMesh = new THREE.Mesh(fl, new THREE.MeshLambertMaterial({color: 0x222222, flatShading: true}));
+            group.add(flMesh);
 
-            const seed = pseudoRandom(cx, cz);
-            const count = Math.floor(seed * 5) + 2; 
+            const count = 5; 
+            const geoms = [
+                new THREE.BoxGeometry(1,1,1),
+                new THREE.ConeGeometry(1,1,4),
+                new THREE.TorusGeometry(1, 0.3, 8, 20),
+                new THREE.DodecahedronGeometry(1)
+            ];
 
             for(let i=0; i<count; i++) {
-                const h = 50 + pseudoRandom(bx+i, bz+i) * 150;
-                const w = 10 + pseudoRandom(bx-i, bz-i) * 30;
+                const s = 10 + pseudoRandom(bx+i, bz+i) * 30;
+                const h = 20 + pseudoRandom(bx-i, bz-i) * 60;
                 
                 let col;
                 if(settingMono) {
-                    const shade = 0.2 + pseudoRandom(bx*i, bz) * 0.2; 
+                    const shade = 0.1 + pseudoRandom(bx*i, bz) * 0.2; 
                     col = new THREE.Color(shade, shade, shade);
                 } else {
                     col = new THREE.Color().setHSL(pseudoRandom(bx*i, bz), 0.5, 0.3);
                 }
 
-                const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshStandardMaterial({color: col}));
-                mesh.position.set(
-                    bx + pseudoRandom(bx+i, i) * abdChunkSize,
-                    h/2 - 20,
-                    bz + pseudoRandom(bz+i, i) * abdChunkSize
-                );
+                const gIdx = Math.floor(pseudoRandom(bx, bz+i) * geoms.length);
+                const geom = geoms[gIdx].clone();
+                const mx = bx + pseudoRandom(bx+i, i) * abdChunkSize;
+                const mz = bz + pseudoRandom(bz+i, i) * abdChunkSize;
+                const my = getTerrainHeight(mx, mz);
+                
+                const mesh = new THREE.Mesh(geom, new THREE.MeshLambertMaterial({color: col}));
+                mesh.position.set(mx, my + h/2, mz);
+                mesh.scale.set(s, h, s);
+                if(gIdx === 2) mesh.rotation.x = Math.PI/2; 
                 group.add(mesh);
             }
 
-            if(pseudoRandom(cx+0.5, cz+0.5) > 0.7) {
+            const debrisCount = 10;
+            for(let i=0; i<debrisCount; i++) {
+                const dx = bx + Math.random() * abdChunkSize;
+                const dz = bz + Math.random() * abdChunkSize;
+                const dy = getTerrainHeight(dx, dz);
+                const dGeo = new THREE.BoxGeometry(1,1,1);
+                const dMesh = new THREE.Mesh(dGeo, new THREE.MeshLambertMaterial({color: 0x555555}));
+                dMesh.position.set(dx, dy + 0.5, dz);
+                dMesh.scale.set(1+Math.random()*2, 1+Math.random()*2, 1+Math.random()*2);
+                dMesh.rotation.set(Math.random(), Math.random(), Math.random());
+                group.add(dMesh);
+            }
+
+            if(pseudoRandom(cx+0.5, cz+0.5) < settingNpcRate) { 
                  const npcX = bx + abdChunkSize/2;
                  const npcZ = bz + abdChunkSize/2;
                  const npc = new NPC(npcX, npcZ);
@@ -1098,7 +1290,7 @@
         function updateCyberMovement() {
             if (!settingCyber) return;
 
-            const speed = isSprinting ? 1.5 : 0.8;
+            const speed = isSprinting ? 2.5 : 1.2;
             const direction = new THREE.Vector3();
             const forward = new THREE.Vector3();
             camera.getWorldDirection(forward);
@@ -1130,22 +1322,44 @@
                 if (!checkCollision(camera.position.x, nextZ)) {
                     playerVelocity.z = velZ;
                 } else { playerVelocity.z = 0; }
+                
+                playerVelocity.y -= 0.05; 
+                if(camera.position.y < -5) {
+                    camera.position.y = -5;
+                    playerVelocity.y = 0;
+                    canJump = true;
+                }
+
+            } else if (inAbandoned) {
+                playerVelocity.x = velX;
+                playerVelocity.z = velZ;
+                
+                const ty = getTerrainHeight(camera.position.x, camera.position.z);
+                const eyeHeight = isCrouching ? 5 : 10;
+                
+                if (camera.position.y < ty + eyeHeight) {
+                    camera.position.y = ty + eyeHeight;
+                    playerVelocity.y = 0;
+                    canJump = true;
+                } else {
+                    playerVelocity.y -= 0.05;
+                }
+                
             } else {
                 playerVelocity.x = velX;
                 playerVelocity.z = velZ;
+                playerVelocity.y -= 0.05; 
+                
+                const eyeHeight = isCrouching ? 5 : 10;
+                const floorLevel = -15 + eyeHeight;
+                if (camera.position.y < floorLevel) {
+                    playerVelocity.y = 0;
+                    camera.position.y = floorLevel;
+                    canJump = true;
+                }
             }
 
-            playerVelocity.y -= 0.05; 
             camera.position.add(playerVelocity);
-
-            let eyeHeight = isCrouching ? 5 : 10;
-            const floorLevel = -15 + eyeHeight;
-
-            if (camera.position.y < floorLevel) {
-                playerVelocity.y = 0;
-                camera.position.y = floorLevel;
-                canJump = true;
-            }
 
             if (flashOn) {
                 flashLight.position.copy(camera.position);
@@ -1161,22 +1375,45 @@
             const coordDiv = document.getElementById('coords');
             
             if (compassArrow) {
-                if (inBackrooms || inAbandoned) {
-                    const camY = camera.rotation.y;
-                    const deg = THREE.MathUtils.radToDeg(-camY);
-                    compassArrow.style.transform = `rotate(${deg}deg)`;
-                } else {
-                    const localPos = currentMesh.position.clone();
-                    localPos.applyMatrix4(camera.matrixWorldInverse);
-                    const angle = Math.atan2(localPos.x, -localPos.z);
-                    const deg = THREE.MathUtils.radToDeg(angle);
-                    compassArrow.style.transform = `rotate(${deg}deg)`;
-                }
+                 if (inBackrooms || inAbandoned) {
+                     document.getElementById('compass').style.display = 'none';
+                 } else {
+                     document.getElementById('compass').style.display = 'flex';
+                     const localPos = currentMesh.position.clone();
+                     localPos.applyMatrix4(camera.matrixWorldInverse);
+                     const angle = Math.atan2(localPos.x, -localPos.z);
+                     const deg = THREE.MathUtils.radToDeg(angle);
+                     compassArrow.style.transform = `rotate(${deg}deg)`;
+                 }
             }
             if (coordDiv) {
                 coordDiv.innerText = `X: ${Math.round(camera.position.x)} Y: ${Math.round(camera.position.z)}`;
             }
         }
+        
+        document.getElementById('coords').addEventListener('click', () => {
+            if(!settingCyber) return;
+            const input = prompt("Enter coordinates (x, z):", "0, 0");
+            if(input) {
+                const [x, z] = input.split(',').map(n => parseFloat(n.trim()));
+                if(!isNaN(x) && !isNaN(z)) {
+                    camera.position.x = x;
+                    camera.position.z = z;
+                    if(inAbandoned) camera.position.y = getTerrainHeight(x, z) + 20;
+                    else camera.position.y = 10;
+                    if(inBackrooms) { loadedChunks = {}; brGroup.clear(); updateBackrooms(); }
+                    if(inAbandoned) { loadedAbdChunks = {}; abdGroup.clear(); updateAbandoned(); }
+                }
+            }
+        });
+        
+        document.getElementById('time-display').addEventListener('click', () => {
+            const t = prompt("Set Time (0-24):", "12");
+            const h = parseFloat(t);
+            if(!isNaN(h) && h >= 0 && h <= 24) {
+                dayTime = (h / 24) * dayCycleDuration;
+            }
+        });
 
         function animate() {
             requestAnimationFrame(animate);
@@ -1325,6 +1562,8 @@
         const crosshair = document.getElementById('crosshair');
         const hudLeft = document.getElementById('hud-top-left');
         const btnBackrooms = document.getElementById('btn-backrooms');
+        const btnGrab = document.getElementById('m-grab');
+        const timeDisplay = document.getElementById('time-display');
         
         let overlayTimeout;
 
@@ -1423,10 +1662,12 @@
             crosshair.style.display = 'none';
             hudLeft.style.display = 'none';
             btnBackrooms.style.display = 'none';
+            timeDisplay.style.display = 'none';
             aimLocked = false;
             btnAimToggle.classList.remove('active');
             
             inBackrooms = false; inAbandoned = false;
+            sunLight.intensity = 0; 
             resetWorldState();
 
             if (document.pointerLockElement === document.body) document.exitPointerLock();
@@ -1478,12 +1719,22 @@
             floorMesh.visible = false;
             brGroup.visible = true;
             abdGroup.visible = false;
+            timeDisplay.style.display = 'none';
+            if(isMobile) btnGrab.innerText = "E";
             
             ambientLight.intensity = 0.2;
-            
+            sunLight.intensity = 0; 
+
+            renderer.setPixelRatio(window.devicePixelRatio * 0.5);
+            document.getElementById('sl-res').value = 0.5;
+            document.getElementById('num-res').value = 0.5;
+
             loadedChunks = {};
-            while(brGroup.children.length > 0){ brGroup.remove(brGroup.children[0]); }
+            brGroup.clear();
             interactables = [];
+            
+            camera.position.x = Math.random() * 1000;
+            camera.position.z = Math.random() * 1000;
         }
 
         function enterAbandoned() {
@@ -1491,6 +1742,8 @@
             inAbandoned = true;
             brGroup.visible = false;
             abdGroup.visible = true;
+            timeDisplay.style.display = 'block';
+            if(isMobile) btnGrab.innerText = "GRAB"; 
             
             scene.background.setHex(0x808080);
             scene.fog.color.setHex(0x808080);
@@ -1498,10 +1751,11 @@
             renderer.setPixelRatio(window.devicePixelRatio * 0.5);
             
             loadedAbdChunks = {};
-            while(abdGroup.children.length > 0){ abdGroup.remove(abdGroup.children[0]); }
+            abdGroup.clear();
             npcs = [];
             
-            camera.position.y = -10; 
+            const h = getTerrainHeight(camera.position.x, camera.position.z);
+            camera.position.y = h + 10; 
         }
 
         document.getElementById('col-flash').addEventListener('input', (e) => { flashLight.color.set(e.target.value); });
@@ -1522,6 +1776,8 @@
             interactables = interactables.filter(obj => !obj.userData.npc); 
         });
         
+        syncInput('sl-npc-rate', 'num-npc-rate', (v) => { settingNpcRate = parseFloat(v); });
+
         syncInput('sl-view-dist', 'num-view-dist', (v) => { 
             camera.far = parseFloat(v); 
             scene.fog.far = parseFloat(v);
@@ -1550,6 +1806,9 @@
                          isHoldingDesktop = false;
                     }
                     break;
+                case 'KeyE':
+                     interactRaycast();
+                     break;
             }
         });
         document.addEventListener('keyup', (e) => {
@@ -1564,30 +1823,56 @@
             }
         });
 
+        function interactRaycast() {
+             raycaster.setFromCamera(new THREE.Vector2(0, 0), camera); 
+             const interactHits = raycaster.intersectObjects(interactables, true); 
+             if (interactHits.length > 0 && interactHits[0].distance < 20) {
+                 const obj = interactHits[0].object;
+                 let target = obj;
+                 while(target.parent && !target.userData.type && !target.userData.npc) {
+                     target = target.parent;
+                 }
+                 if (target.userData.type === 'door') {
+                     enterAbandoned();
+                     return;
+                 }
+                 if (target.userData.npc) {
+                     target.userData.npc.interact();
+                     return;
+                 }
+             }
+        }
+
         document.addEventListener('mousedown', (e) => {
             if (!settingCyber || isMobile || e.target.closest('#ui-wrapper')) return;
 
-            if (e.button === 2) {
-            }
             if (e.button === 0) {
-                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera); 
+                const rayMouse = new THREE.Vector2();
                 
+                if (document.pointerLockElement === document.body || aimLocked) {
+                    rayMouse.set(0, 0); 
+                } else {
+                    rayMouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                    rayMouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                }
+                
+                raycaster.setFromCamera(rayMouse, camera); 
                 const interactHits = raycaster.intersectObjects(interactables, true); 
+                
                 if (interactHits.length > 0 && interactHits[0].distance < 20) {
-                    const obj = interactHits[0].object;
-                    let target = obj;
-                    while(target.parent && !target.userData.type && !target.userData.npc) {
-                        target = target.parent;
-                    }
-
-                    if (target.userData.type === 'door') {
-                        enterAbandoned();
-                        return;
-                    }
-                    if (target.userData.npc) {
-                        target.userData.npc.interact();
-                        return;
-                    }
+                     const obj = interactHits[0].object;
+                     let target = obj;
+                     while(target.parent && !target.userData.type && !target.userData.npc) {
+                         target = target.parent;
+                     }
+                     if (target.userData.type === 'door') {
+                         enterAbandoned();
+                         return;
+                     }
+                     if (target.userData.npc) {
+                         target.userData.npc.interact();
+                         return;
+                     }
                 }
 
                 const intersects = raycaster.intersectObject(currentMesh);
@@ -1714,20 +1999,23 @@
         document.getElementById('m-crouch').addEventListener('touchend', (e)=>{ e.preventDefault(); isCrouching=false; });
         document.getElementById('m-flash').addEventListener('touchstart', (e)=>{ e.preventDefault(); flashOn=!flashOn; });
 
-        const btnGrab = document.getElementById('m-grab');
         const btnDrop = document.getElementById('m-drop');
         const btnThrow = document.getElementById('m-throw');
 
         btnGrab.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera); 
-            const intersects = raycaster.intersectObject(currentMesh);
-            if (currentMesh.position.distanceTo(camera.position) < 25 && !inBackrooms && !inAbandoned) {
-                isHoldingMobile = true;
-                holdDistance = currentMesh.position.distanceTo(camera.position);
-                btnGrab.style.display = 'none';
-                btnDrop.style.display = 'flex';
-                btnThrow.style.display = 'flex';
+            if(inBackrooms || inAbandoned) {
+                interactRaycast();
+            } else {
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera); 
+                const intersects = raycaster.intersectObject(currentMesh);
+                if (currentMesh.position.distanceTo(camera.position) < 25 && !inBackrooms && !inAbandoned) {
+                    isHoldingMobile = true;
+                    holdDistance = currentMesh.position.distanceTo(camera.position);
+                    btnGrab.style.display = 'none';
+                    btnDrop.style.display = 'flex';
+                    btnThrow.style.display = 'flex';
+                }
             }
         });
 
